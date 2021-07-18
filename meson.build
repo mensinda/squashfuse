@@ -324,7 +324,7 @@ libsquashfuse_dep = declare_dependency(
   )
 
 fuseprivate = static_library(
-  'fuseprivate', ['fuseprivate.c', 'stat.c'],
+  'fuseprivate', ['fuseprivate.c', 'stat.c', 'squashfuse_dlopen.c'],
   c_args:       ['-fno-strict-aliasing'],
   link_with:    [nonstd_lib],
   dependencies: [compression_deps, fuse_dep],

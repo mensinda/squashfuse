@@ -38,6 +38,18 @@
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {
+	LOAD_SYMBOL(int,fuse_opt_parse,(struct fuse_args *args, void *data, const struct fuse_opt opts[], fuse_opt_proc_t proc));
+	LOAD_SYMBOL(int,fuse_parse_cmdline,(struct fuse_args *args, char **mountpoint, int *multithreaded, int *foreground));
+	LOAD_SYMBOL(struct fuse_session *,fuse_lowlevel_new,(struct fuse_args *args, const struct fuse_lowlevel_ops *op, size_t op_size, void *userdata));
+	LOAD_SYMBOL(int,fuse_set_signal_handlers,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_session_add_chan,(struct fuse_session *se, struct fuse_chan *ch));
+	LOAD_SYMBOL(int,fuse_session_loop,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_remove_signal_handlers,(struct fuse_session *se));
+#if HAVE_DECL_FUSE_SESSION_REMOVE_CHAN
+	LOAD_SYMBOL(void,fuse_session_remove_chan,(struct fuse_chan *ch));
+#endif
+	LOAD_SYMBOL(void,fuse_session_destroy,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_opt_free_args,(struct fuse_args *args));
 	struct fuse_args args;
 	sqfs_opts opts;
 
@@ -74,24 +86,24 @@ int main(int argc, char *argv[]) {
 	sqfs_ll_ops.getxattr	= sqfs_ll_op_getxattr;
 	sqfs_ll_ops.forget		= sqfs_ll_op_forget;
 	sqfs_ll_ops.statfs    = stfs_ll_op_statfs;
-   
+
 	/* PARSE ARGS */
 	args.argc = argc;
 	args.argv = argv;
 	args.allocated = 0;
-	
+
 	opts.progname = argv[0];
 	opts.image = NULL;
 	opts.mountpoint = 0;
 	opts.offset = 0;
 	opts.idle_timeout_secs = 0;
-	if (fuse_opt_parse(&args, &opts, fuse_opts, sqfs_opt_proc) == -1)
+	if (DL(fuse_opt_parse)(&args, &opts, fuse_opts, sqfs_opt_proc) == -1)
 		sqfs_usage(argv[0], true);
 
 #if FUSE_USE_VERSION >= 30
-	if (fuse_parse_cmdline(&args, &fuse_cmdline_opts) != 0)
+	if (DL(fuse_parse_cmdline)(&args, &fuse_cmdline_opts) != 0)
 #else
-	if (fuse_parse_cmdline(&args,
+	if (DL(fuse_parse_cmdline)(&args,
                            &fuse_cmdline_opts.mountpoint,
                            &fuse_cmdline_opts.mt,
                            &fuse_cmdline_opts.foreground) == -1)
@@ -138,23 +150,23 @@ int main(int argc, char *argv[]) {
                         sizeof(sqfs_ll_ops),
                         ll) == SQFS_OK) {
 			if (sqfs_ll_daemonize(fuse_cmdline_opts.foreground) != -1) {
-				if (fuse_set_signal_handlers(ch.session) != -1) {
+				if (DL(fuse_set_signal_handlers)(ch.session) != -1) {
 					if (opts.idle_timeout_secs) {
 						setup_idle_timeout(ch.session, opts.idle_timeout_secs);
 					}
 					/* FIXME: multithreading */
-					err = fuse_session_loop(ch.session);
+					err = DL(fuse_session_loop)(ch.session);
 					teardown_idle_timeout();
-					fuse_remove_signal_handlers(ch.session);
+					DL(fuse_remove_signal_handlers)(ch.session);
 				}
 			}
 			sqfs_ll_destroy(ll);
 			sqfs_ll_unmount(&ch, fuse_cmdline_opts.mountpoint);
 		}
 	}
-	fuse_opt_free_args(&args);
+	DL(fuse_opt_free_args)(&args);
 	free(ll);
 	free(fuse_cmdline_opts.mountpoint);
-	
+
 	return -err;
 }

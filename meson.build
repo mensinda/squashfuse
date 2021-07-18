@@ -3,11 +3,14 @@ project('squashfuse', ['c'],
   meson_version: '>=0.58.0',
   default_options: [
     'warning_level=3',
+    'default_library=static',
   ],
 )
 
 cc = meson.get_compiler('c')
 pkg = import('pkgconfig')
+
+add_project_link_arguments('-static', language: 'c')
 
 #
 #   Generate the config.h
@@ -39,6 +42,7 @@ conf_data.set_quoted('PACKAGE_TARNAME',   meson.project_name())
 conf_data.set_quoted('PACKAGE_URL',       '')
 
 conf_data.set('_POSIX_C_SOURCE', '200112L')
+conf_data.set('ENABLE_DLOPEN', 1)
 
 foreach h : system_headers
   define = 'HAVE_' + h.to_upper().underscorify()
@@ -233,6 +237,9 @@ if fuse_dep.found()
   endif
 endif
 
+# We use dlopen, so remove all the link args from the fuse_dep
+fuse_dep = fuse_dep.partial_dependency(compile_args: true, includes: true)
+
 
 # Write the config file
 configure_file(
@@ -327,7 +334,7 @@ fuseprivate = static_library(
   'fuseprivate', ['fuseprivate.c', 'stat.c', 'squashfuse_dlopen.c'],
   c_args:       ['-fno-strict-aliasing'],
   link_with:    [nonstd_lib],
-  dependencies: [compression_deps, fuse_dep],
+  dependencies: [compression_deps, fuse_dep, cc.find_library('dl')],
 )
 
 if get_option('enable_hl')

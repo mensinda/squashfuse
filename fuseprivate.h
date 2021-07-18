@@ -27,11 +27,14 @@
 
 #include "squashfuse.h"
 
+#include "squashfuse_dlopen.h"
+#ifndef ENABLE_DLOPEN
 #if FUSE_USE_VERSION >= 30
 #include <fuse3/fuse.h>
 #include <fuse3/fuse_lowlevel.h>
 #else
 #include <fuse.h>
+#endif
 #endif
 
 /* Common functions for FUSE high- and low-level clients */

@@ -1,6 +1,7 @@
 COMPRESSION_LIBS = $(ZLIB_LIBS) $(XZ_LIBS) $(LZO_LIBS) $(LZ4_LIBS) $(ZSTD_LIBS)
 
 ACLOCAL_AMFLAGS = -I m4 --install
+AM_CFLAGS = -fno-strict-aliasing -DENABLE_DLOPEN
 
 # Suppress AppleDouble
 if MAKE_EXPORT
@@ -12,7 +13,7 @@ EXTRA_DIST = gen_swap.sh autogen.sh LICENSE CONFIGURATION PLATFORMS NEWS win
 
 bin_PROGRAMS =
 noinst_PROGRAMS =
-lib_LTLIBRARIES = 
+lib_LTLIBRARIES =
 noinst_LTLIBRARIES =
 
 pkgincludedir = @includedir@/squashfuse
@@ -26,13 +27,13 @@ pkgconfig_DATA 	= squashfuse.pc
 noinst_LTLIBRARIES += libsquashfuse_convenience.la
 libsquashfuse_convenience_la_SOURCES = swap.c cache.c table.c dir.c file.c fs.c \
 	decompress.c xattr.c hash.c stack.c traverse.c util.c \
-	nonstd-pread.c nonstd-stat.c \
+	nonstd-pread.c nonstd-stat.c squashfuse_dlopen.c \
 	squashfs_fs.h common.h nonstd-internal.h nonstd.h swap.h cache.h table.h \
 	dir.h file.h decompress.h xattr.h squashfuse.h hash.h stack.h traverse.h \
-	util.h fs.h
+	util.h fs.h squashfuse_dlopen.h
 libsquashfuse_convenience_la_CPPFLAGS = $(ZLIB_CPPFLAGS) $(XZ_CPPFLAGS) $(LZO_CPPFLAGS) \
 	$(LZ4_CPPFLAGS) $(ZSTD_CPPFLAGS) $(FUSE_CPPFLAGS)
-libsquashfuse_convenience_la_LIBADD = $(COMPRESSION_LIBS) $(FUSE_LIBS)
+libsquashfuse_convenience_la_LIBADD = $(COMPRESSION_LIBS) $(FUSE_LIBS) -ldl
 
 # Main library: libsquashfuse
 lib_LTLIBRARIES += libsquashfuse.la

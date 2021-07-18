@@ -54,6 +54,8 @@ static struct fuse_session *fuse_instance = NULL;
 
 void sqfs_ll_op_getattr(fuse_req_t req, fuse_ino_t ino,
 		struct fuse_file_info *fi) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_attr,(fuse_req_t req, const struct stat *attr, double attr_timeout));
 	sqfs_ll_i lli;
 	struct stat st;
 	last_access = time(NULL);
@@ -61,15 +63,17 @@ void sqfs_ll_op_getattr(fuse_req_t req, fuse_ino_t ino,
 		return;
 
 	if (sqfs_stat(&lli.ll->fs, &lli.inode, &st)) {
-		fuse_reply_err(req, ENOENT);
+		DL(fuse_reply_err)(req, ENOENT);
 	} else {
 		st.st_ino = ino;
-		fuse_reply_attr(req, &st, SQFS_TIMEOUT);
+		DL(fuse_reply_attr)(req, &st, SQFS_TIMEOUT);
 	}
 }
 
 void sqfs_ll_op_opendir(fuse_req_t req, fuse_ino_t ino,
 		struct fuse_file_info *fi) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_open,(fuse_req_t req, const struct fuse_file_info *fi));
 	sqfs_ll_i *lli;
 	last_access = time(NULL);
 
@@ -77,17 +81,17 @@ void sqfs_ll_op_opendir(fuse_req_t req, fuse_ino_t ino,
 
 	lli = malloc(sizeof(*lli));
 	if (!lli) {
-		fuse_reply_err(req, ENOMEM);
+		DL(fuse_reply_err)(req, ENOMEM);
 		return;
 	}
 
 	if (sqfs_ll_iget(req, lli, ino) == SQFS_OK) {
 		if (!S_ISDIR(lli->inode.base.mode)) {
-			fuse_reply_err(req, ENOTDIR);
+			DL(fuse_reply_err)(req, ENOTDIR);
 		} else {
 			fi->fh = (intptr_t)lli;
 			++open_refcount;
-			fuse_reply_open(req, fi);
+			DL(fuse_reply_open)(req, fi);
 			return;
 		}
 	}
@@ -96,8 +100,9 @@ void sqfs_ll_op_opendir(fuse_req_t req, fuse_ino_t ino,
 
 void sqfs_ll_op_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			      mode_t mode, struct fuse_file_info *fi) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
 	last_access = time(NULL);
-	fuse_reply_err(req, EROFS);
+	DL(fuse_reply_err)(req, EROFS);
 }
 
 void sqfs_ll_op_releasedir(fuse_req_t req, fuse_ino_t ino,
@@ -105,22 +110,28 @@ void sqfs_ll_op_releasedir(fuse_req_t req, fuse_ino_t ino,
 	last_access = time(NULL);
 	--open_refcount;
 	free((sqfs_ll_i*)(intptr_t)fi->fh);
-	fuse_reply_err(req, 0); /* yes, this is necessary */
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	DL(fuse_reply_err)(req, 0); /* yes, this is necessary */
 }
 
 size_t sqfs_ll_add_direntry(fuse_req_t req, char *buf, size_t bufsize,
 		const char *name, const struct stat *st, off_t off) {
 	#if HAVE_DECL_FUSE_ADD_DIRENTRY
-		return fuse_add_direntry(req, buf, bufsize, name, st, off);
+		LOAD_SYMBOL(size_t,fuse_add_direntry,(fuse_req_t req, char *buf, size_t bufsize, const char *name, const struct stat *stbuf, off_t off));
+		return DL(fuse_add_direntry)(req, buf, bufsize, name, st, off);
 	#else
-		size_t esize = fuse_dirent_size(strlen(name));
+		LOAD_SYMBOL(size_t,DL(fuse_dirent_size)(size_t namelen));
+		LOAD_SYMBOL(char *,fuse_add_dirent,(char *buf, const char *name, const struct stat *stbuf, off_t off));
+		size_t esize = DL(fuse_dirent_size)(strlen(name));
 		if (bufsize >= esize)
-			fuse_add_dirent(buf, name, st, off);
+			DL(fuse_add_dirent)(buf, name, st, off);
 		return esize;
 	#endif
 }
 void sqfs_ll_op_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		off_t off, struct fuse_file_info *fi) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_buf,(fuse_req_t req, const char *buf, size_t size));
 	sqfs_err sqerr;
 	sqfs_dir dir;
 	sqfs_name namebuf;
@@ -158,14 +169,16 @@ void sqfs_ll_op_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 	}
 
 	if (err)
-		fuse_reply_err(req, err);
+		DL(fuse_reply_err)(req, err);
 	else
-		fuse_reply_buf(req, buf, bufpos - buf);
+		DL(fuse_reply_buf)(req, buf, bufpos - buf);
 	free(buf);
 }
 
 void sqfs_ll_op_lookup(fuse_req_t req, fuse_ino_t parent,
 		const char *name) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_entry,(fuse_req_t req, const struct fuse_entry_param *e));
 	sqfs_ll_i lli;
 	sqfs_err sqerr;
 	sqfs_name namebuf;
@@ -178,7 +191,7 @@ void sqfs_ll_op_lookup(fuse_req_t req, fuse_ino_t parent,
 		return;
 
 	if (!S_ISDIR(lli.inode.base.mode)) {
-		fuse_reply_err(req, ENOTDIR);
+		DL(fuse_reply_err)(req, ENOTDIR);
 		return;
 	}
 
@@ -186,7 +199,7 @@ void sqfs_ll_op_lookup(fuse_req_t req, fuse_ino_t parent,
 	sqerr = sqfs_dir_lookup(&lli.ll->fs, &lli.inode, name, strlen(name), &entry,
 		&found);
 	if (sqerr) {
-		fuse_reply_err(req, EIO);
+		DL(fuse_reply_err)(req, EIO);
 		return;
 	}
 	if (!found) {
@@ -198,53 +211,56 @@ void sqfs_ll_op_lookup(fuse_req_t req, fuse_ino_t parent,
 		memset(&fentry, 0, sizeof(fentry));
 		fentry.attr_timeout = fentry.entry_timeout = SQFS_TIMEOUT;
 		fentry.ino = 0;
-		fuse_reply_entry(req, &fentry);
+		DL(fuse_reply_entry)(req, &fentry);
 		return;
 	}
 
 	if (sqfs_inode_get(&lli.ll->fs, &inode, sqfs_dentry_inode(&entry))) {
-		fuse_reply_err(req, ENOENT);
+		DL(fuse_reply_err)(req, ENOENT);
 	} else {
 		struct fuse_entry_param fentry;
 		memset(&fentry, 0, sizeof(fentry));
 		if (sqfs_stat(&lli.ll->fs, &inode, &fentry.attr)) {
-			fuse_reply_err(req, EIO);
+			DL(fuse_reply_err)(req, EIO);
 		} else {
 			fentry.attr_timeout = fentry.entry_timeout = SQFS_TIMEOUT;
 			fentry.ino = lli.ll->ino_register(lli.ll, &entry);
 			fentry.attr.st_ino = fentry.ino;
-			fuse_reply_entry(req, &fentry);
+			DL(fuse_reply_entry)(req, &fentry);
 		}
 	}
 }
 
 void sqfs_ll_op_open(fuse_req_t req, fuse_ino_t ino,
 		struct fuse_file_info *fi) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_open,(fuse_req_t req, const struct fuse_file_info *fi));
+	LOAD_SYMBOL(void *,fuse_req_userdata,(fuse_req_t req));
 	sqfs_inode *inode;
 	sqfs_ll *ll;
 
 	last_access = time(NULL);
 	if (fi->flags & (O_WRONLY | O_RDWR)) {
-		fuse_reply_err(req, EROFS);
+		DL(fuse_reply_err)(req, EROFS);
 		return;
 	}
 
 	inode = malloc(sizeof(sqfs_inode));
 	if (!inode) {
-		fuse_reply_err(req, ENOMEM);
+		DL(fuse_reply_err)(req, ENOMEM);
 		return;
 	}
 
-	ll = fuse_req_userdata(req);
+	ll = DL(fuse_req_userdata)(req);
 	if (sqfs_ll_inode(ll, inode, ino)) {
-		fuse_reply_err(req, ENOENT);
+		DL(fuse_reply_err)(req, ENOENT);
 	} else if (!S_ISREG(inode->base.mode)) {
-		fuse_reply_err(req, EISDIR);
+		DL(fuse_reply_err)(req, EISDIR);
 	} else {
 		fi->fh = (intptr_t)inode;
 		fi->keep_cache = 1;
 		++open_refcount;
-		fuse_reply_open(req, fi);
+		DL(fuse_reply_open)(req, fi);
 		return;
 	}
 	free(inode);
@@ -252,23 +268,27 @@ void sqfs_ll_op_open(fuse_req_t req, fuse_ino_t ino,
 
 void sqfs_ll_op_release(fuse_req_t req, fuse_ino_t ino,
 		struct fuse_file_info *fi) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
 	free((sqfs_inode*)(intptr_t)fi->fh);
 	fi->fh = 0;
 	last_access = time(NULL);
 	--open_refcount;
-	fuse_reply_err(req, 0);
+	DL(fuse_reply_err)(req, 0);
 }
 
 void sqfs_ll_op_read(fuse_req_t req, fuse_ino_t ino,
 		size_t size, off_t off, struct fuse_file_info *fi) {
-	sqfs_ll *ll = fuse_req_userdata(req);
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_buf,(fuse_req_t req, const char *buf, size_t size));
+	LOAD_SYMBOL(void *,fuse_req_userdata,(fuse_req_t req));
+	sqfs_ll *ll = DL(fuse_req_userdata)(req);
 	sqfs_inode *inode = (sqfs_inode*)(intptr_t)fi->fh;
 	sqfs_err err = SQFS_OK;
 
 	off_t osize;
 	char *buf = malloc(size);
 	if (!buf) {
-		fuse_reply_err(req, ENOMEM);
+		DL(fuse_reply_err)(req, ENOMEM);
 		return;
 	}
 
@@ -276,16 +296,18 @@ void sqfs_ll_op_read(fuse_req_t req, fuse_ino_t ino,
 	osize = size;
 	err = sqfs_read_range(&ll->fs, inode, off, &osize, buf);
 	if (err) {
-		fuse_reply_err(req, EIO);
+		DL(fuse_reply_err)(req, EIO);
 	} else if (osize == 0) { /* EOF */
-		fuse_reply_buf(req, NULL, 0);
+		DL(fuse_reply_buf)(req, NULL, 0);
 	} else {
-		fuse_reply_buf(req, buf, osize);
+		DL(fuse_reply_buf)(req, buf, osize);
 	}
 	free(buf);
 }
 
 void sqfs_ll_op_readlink(fuse_req_t req, fuse_ino_t ino) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_readlink,(fuse_req_t req, const char *link));
 	char *dst;
 	size_t size;
 	sqfs_ll_i lli;
@@ -294,21 +316,24 @@ void sqfs_ll_op_readlink(fuse_req_t req, fuse_ino_t ino) {
 		return;
 
 	if (!S_ISLNK(lli.inode.base.mode)) {
-		fuse_reply_err(req, EINVAL);
+		DL(fuse_reply_err)(req, EINVAL);
 	} else if (sqfs_readlink(&lli.ll->fs, &lli.inode, NULL, &size)) {
-		fuse_reply_err(req, EIO);
+		DL(fuse_reply_err)(req, EIO);
 	} else if (!(dst = malloc(size + 1))) {
-		fuse_reply_err(req, ENOMEM);
+		DL(fuse_reply_err)(req, ENOMEM);
 	} else if (sqfs_readlink(&lli.ll->fs, &lli.inode, dst, &size)) {
-		fuse_reply_err(req, EIO);
+		DL(fuse_reply_err)(req, EIO);
 		free(dst);
 	} else {
-		fuse_reply_readlink(req, dst);
+		DL(fuse_reply_readlink)(req, dst);
 		free(dst);
 	}
 }
 
 void sqfs_ll_op_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_buf,(fuse_req_t req, const char *buf, size_t size));
+	LOAD_SYMBOL(int,fuse_reply_xattr,(fuse_req_t req, size_t count));
 	sqfs_ll_i lli;
 	char *buf;
 	int ferr;
@@ -319,17 +344,17 @@ void sqfs_ll_op_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size) {
 
 	buf = NULL;
 	if (size && !(buf = malloc(size))) {
-		fuse_reply_err(req, ENOMEM);
+		DL(fuse_reply_err)(req, ENOMEM);
 		return;
 	}
 
 	ferr = sqfs_listxattr(&lli.ll->fs, &lli.inode, buf, &size);
 	if (ferr) {
-		fuse_reply_err(req, ferr);
+		DL(fuse_reply_err)(req, ferr);
 	} else if (buf) {
-		fuse_reply_buf(req, buf, size);
+		DL(fuse_reply_buf)(req, buf, size);
 	} else {
-		fuse_reply_xattr(req, size);
+		DL(fuse_reply_xattr)(req, size);
 	}
 	free(buf);
 }
@@ -340,13 +365,16 @@ void sqfs_ll_op_getxattr(fuse_req_t req, fuse_ino_t ino,
 		, uint32_t position
 #endif
 		) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_buf,(fuse_req_t req, const char *buf, size_t size));
+	LOAD_SYMBOL(int,fuse_reply_xattr,(fuse_req_t req, size_t count));
 	sqfs_ll_i lli;
 	char *buf = NULL;
 	size_t real = size;
 
 #ifdef FUSE_XATTR_POSITION
 	if (position != 0) { /* We don't support resource forks */
-		fuse_reply_err(req, EINVAL);
+		DL(fuse_reply_err)(req, EINVAL);
 		return;
 	}
 #endif
@@ -356,40 +384,44 @@ void sqfs_ll_op_getxattr(fuse_req_t req, fuse_ino_t ino,
 		return;
 
 	if (!(buf = malloc(size)))
-		fuse_reply_err(req, ENOMEM);
+		DL(fuse_reply_err)(req, ENOMEM);
 	else if (sqfs_xattr_lookup(&lli.ll->fs, &lli.inode, name, buf, &real))
-		fuse_reply_err(req, EIO);
+		DL(fuse_reply_err)(req, EIO);
 	else if (real == 0)
-		fuse_reply_err(req, sqfs_enoattr());
+		DL(fuse_reply_err)(req, sqfs_enoattr());
 	else if (size == 0)
-		fuse_reply_xattr(req, real);
+		DL(fuse_reply_xattr)(req, real);
 	else if (size < real)
-		fuse_reply_err(req, ERANGE);
+		DL(fuse_reply_err)(req, ERANGE);
 	else
-		fuse_reply_buf(req, buf, real);
+		DL(fuse_reply_buf)(req, buf, real);
 	free(buf);
 }
 
 void sqfs_ll_op_forget(fuse_req_t req, fuse_ino_t ino,
 		unsigned long nlookup) {
+	LOAD_SYMBOL(void,fuse_reply_none,(fuse_req_t req));
 	sqfs_ll_i lli;
 	last_access = time(NULL);
 	sqfs_ll_iget(req, &lli, SQFS_FUSE_INODE_NONE);
 	lli.ll->ino_forget(lli.ll, ino, nlookup);
-	fuse_reply_none(req);
+	DL(fuse_reply_none)(req);
 }
 
 void stfs_ll_op_statfs(fuse_req_t req, fuse_ino_t ino) {
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
+	LOAD_SYMBOL(int,fuse_reply_statfs,(fuse_req_t req, const struct statvfs *stbuf));
+	LOAD_SYMBOL(void *,fuse_req_userdata,(fuse_req_t req));
 	sqfs_ll *ll;
 	struct statvfs st;
 	int err;
 
-	ll = fuse_req_userdata(req);
+	ll = DL(fuse_req_userdata)(req);
 	err = sqfs_statfs(&ll->fs, &st);
 	if (err == 0) {
-		fuse_reply_statfs(req, &st);
+		DL(fuse_reply_statfs)(req, &st);
 	} else {
-		fuse_reply_err(req, err);
+		DL(fuse_reply_err)(req, err);
 	}
 }
 
@@ -403,12 +435,15 @@ sqfs_err sqfs_ll_mount(
         struct fuse_lowlevel_ops *ops,
         size_t ops_size,
         void *userdata) {
-	ch->session = fuse_session_new(args, ops, ops_size, userdata);
+	LOAD_SYMBOL(struct fuse_session *,fuse_session_new,(struct fuse_args *args, const struct fuse_lowlevel_ops *op, size_t op_size, void *userdata));
+	LOAD_SYMBOL(void,fuse_session_destroy,(struct fuse_session *se));
+	LOAD_SYMBOL(int,fuse_session_mount,(struct fuse_session *se, const char *mountpoint));
+	ch->session = DL(fuse_session_new)(args, ops, ops_size, userdata);
 	if (!ch->session) {
 		return SQFS_ERR;
 	}
-	if (fuse_session_mount(ch->session, mountpoint)) {
-		fuse_session_destroy(ch->session);
+	if (DL(fuse_session_mount)(ch->session, mountpoint)) {
+		DL(fuse_session_destroy)(ch->session);
 		ch->session = NULL;
 		return SQFS_ERR;
 	}
@@ -416,8 +451,10 @@ sqfs_err sqfs_ll_mount(
 }
 
 void sqfs_ll_unmount(sqfs_ll_chan *ch, const char *mountpoint) {
-	fuse_session_unmount(ch->session);
-	fuse_session_destroy(ch->session);
+	LOAD_SYMBOL(void,fuse_session_unmount,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_session_destroy,(struct fuse_session *se));
+	DL(fuse_session_unmount)(ch->session);
+	DL(fuse_session_destroy)(ch->session);
 	ch->session = NULL;
 }
 
@@ -426,15 +463,19 @@ void sqfs_ll_unmount(sqfs_ll_chan *ch, const char *mountpoint) {
 void sqfs_ll_unmount(sqfs_ll_chan *ch, const char *mountpoint) {
 	if (ch->session) {
 #if HAVE_DECL_FUSE_SESSION_REMOVE_CHAN
-		fuse_session_remove_chan(ch->ch);
+		LOAD_SYMBOL(void,fuse_session_remove_chan,(struct fuse_chan *ch));
+		DL(fuse_session_remove_chan)(ch->ch);
 #endif
-		fuse_session_destroy(ch->session);
+		LOAD_SYMBOL(void,fuse_session_destroy,(struct fuse_session *se));
+		DL(fuse_session_destroy)(ch->session);
 	}
 #ifdef HAVE_NEW_FUSE_UNMOUNT
-	fuse_unmount(mountpoint, ch->ch);
+	LOAD_SYMBOL(void,fuse_unmount,(const char *mountpoint, struct fuse_chan *ch));
+	DL(fuse_unmount)(mountpoint, ch->ch);
 #else
 	close(ch->fd);
-	fuse_unmount(mountpoint);
+	LOAD_SYMBOL(void,fuse_unmount,(const char *mountpoint));
+	DL(fuse_unmount)(mountpoint);
 #endif
 }
 
@@ -445,29 +486,33 @@ sqfs_err sqfs_ll_mount(
 		struct fuse_lowlevel_ops *ops,
 		size_t ops_size,
 		void *userdata) {
+	LOAD_SYMBOL(struct fuse_session *,fuse_lowlevel_new,(struct fuse_args *args, const struct fuse_lowlevel_ops *op, size_t op_size, void *userdata))
+	LOAD_SYMBOL(void,fuse_session_add_chan,(struct fuse_session *se, struct fuse_chan *ch))
 #ifdef HAVE_NEW_FUSE_UNMOUNT
-	ch->ch = fuse_mount(mountpoint, args);
+	LOAD_SYMBOL(struct fuse_chan *,fuse_mount,(const char *mountpoint, struct fuse_args *args));
+	ch->ch = DL(fuse_mount)(mountpoint, args);
 	if (!ch->ch) {
 		return SQFS_ERR;
 	}
 #else
-	ch->fd = fuse_mount(mountpoint, args);
+	LOAD_SYMBOL(int,fuse_mount,(const char *mountpoint, struct fuse_args *args));
+	ch->fd = DL(fuse_mount)(mountpoint, args);
 	if (ch->fd == -1)
 		return SQFS_ERR;
-	ch->ch = fuse_kern_chan_new(ch->fd);
+	ch->ch = DL(fuse_kern_chan_new)(ch->fd);
 	if (!ch->ch) {
 		close(ch->fd);
 		return SQFS_ERR;
 	}
 #endif
 
-	ch->session = fuse_lowlevel_new(args,
+	ch->session = DL(fuse_lowlevel_new)(args,
 			ops, sizeof(*ops), userdata);
 	if (!ch->session) {
 		sqfs_ll_unmount(ch, mountpoint);
 		return SQFS_ERR;
 	}
-	fuse_session_add_chan(ch->session, ch->ch);
+	DL(fuse_session_add_chan)(ch->session, ch->ch);
 	return SQFS_OK;
 }
 
@@ -545,6 +590,18 @@ sqfs_ll *sqfs_ll_open(const char *path, size_t offset) {
 }
 
 int fusefs_main(int argc, char *argv[], void (*mounted) (void)) {
+	LOAD_SYMBOL(int,fuse_opt_parse,(struct fuse_args *args, void *data, const struct fuse_opt opts[], fuse_opt_proc_t proc));
+	LOAD_SYMBOL(int,fuse_parse_cmdline,(struct fuse_args *args, char **mountpoint, int *multithreaded, int *foreground));
+	LOAD_SYMBOL(struct fuse_session *,fuse_lowlevel_new,(struct fuse_args *args, const struct fuse_lowlevel_ops *op, size_t op_size, void *userdata));
+	LOAD_SYMBOL(int,fuse_set_signal_handlers,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_session_add_chan,(struct fuse_session *se, struct fuse_chan *ch));
+	LOAD_SYMBOL(int,fuse_session_loop,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_remove_signal_handlers,(struct fuse_session *se));
+#if HAVE_DECL_FUSE_SESSION_REMOVE_CHAN
+	LOAD_SYMBOL(void,fuse_session_remove_chan,(struct fuse_chan *ch));
+#endif
+	LOAD_SYMBOL(void,fuse_session_destroy,(struct fuse_session *se));
+	LOAD_SYMBOL(void,fuse_opt_free_args,(struct fuse_args *args));
 	struct fuse_args args;
 	sqfs_opts opts;
 
@@ -592,13 +649,13 @@ int fusefs_main(int argc, char *argv[], void (*mounted) (void)) {
 	opts.mountpoint = 0;
 	opts.offset = 0;
 	opts.idle_timeout_secs = 0;
-	if (fuse_opt_parse(&args, &opts, fuse_opts, sqfs_opt_proc) == -1)
+	if (DL(fuse_opt_parse)(&args, &opts, fuse_opts, sqfs_opt_proc) == -1)
 		sqfs_usage(argv[0], true);
 
 #if FUSE_USE_VERSION >= 30
-	if (fuse_parse_cmdline(&args, &fuse_cmdline_opts) != 0)
+	if (DL(fuse_parse_cmdline)(&args, &fuse_cmdline_opts) != 0)
 #else
-	if (fuse_parse_cmdline(&args,
+	if (DL(fuse_parse_cmdline)(&args,
                            &fuse_cmdline_opts.mountpoint,
                            &fuse_cmdline_opts.mt,
                            &fuse_cmdline_opts.foreground) == -1)
@@ -645,7 +702,7 @@ int fusefs_main(int argc, char *argv[], void (*mounted) (void)) {
                         sizeof(sqfs_ll_ops),
                         ll) == SQFS_OK) {
 			if (sqfs_ll_daemonize(fuse_cmdline_opts.foreground) != -1) {
-				if (fuse_set_signal_handlers(ch.session) != -1) {
+				if (DL(fuse_set_signal_handlers)(ch.session) != -1) {
 					if (opts.idle_timeout_secs) {
 						setup_idle_timeout(ch.session, opts.idle_timeout_secs);
 					}
@@ -653,16 +710,16 @@ int fusefs_main(int argc, char *argv[], void (*mounted) (void)) {
 						mounted();
 					}
 					/* FIXME: multithreading */
-					err = fuse_session_loop(ch.session);
+					err = DL(fuse_session_loop)(ch.session);
 					teardown_idle_timeout();
-					fuse_remove_signal_handlers(ch.session);
+					DL(fuse_remove_signal_handlers)(ch.session);
 				}
 			}
 			sqfs_ll_destroy(ll);
 			sqfs_ll_unmount(&ch, fuse_cmdline_opts.mountpoint);
 		}
 	}
-	fuse_opt_free_args(&args);
+	DL(fuse_opt_free_args)(&args);
 	if (mounted) {
 		rmdir (fuse_cmdline_opts.mountpoint);
 	}

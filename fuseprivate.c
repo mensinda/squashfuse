@@ -60,18 +60,21 @@ int sqfs_listxattr(sqfs *fs, sqfs_inode *inode, char *buf, size_t *size) {
 }
 
 void sqfs_usage(char *progname, bool fuse_usage) {
+	LOAD_SYMBOL(int,fuse_opt_add_arg,(struct fuse_args *args, const char *arg));
+	LOAD_SYMBOL(int,fuse_parse_cmdline,(struct fuse_args *args, char **mountpoint, int *multithreaded, int *foreground));
 	fprintf(stderr, "%s (c) 2012 Dave Vasilevsky\n\n", PACKAGE_STRING);
 	fprintf(stderr, "Usage: %s [options] ARCHIVE MOUNTPOINT\n",
 		progname ? progname : PACKAGE_NAME);
 	if (fuse_usage) {
 #if FUSE_USE_VERSION >= 30
-		fuse_cmdline_help();
+		LOAD_SYMBOL(void,fuse_cmdline_help,(void));
+		DL(fuse_cmdline_help)();
 #else
 		struct fuse_args args = FUSE_ARGS_INIT(0, NULL);
-		fuse_opt_add_arg(&args, ""); /* progname */
-		fuse_opt_add_arg(&args, "-ho");
+		DL(fuse_opt_add_arg)(&args, ""); /* progname */
+		DL(fuse_opt_add_arg)(&args, "-ho");
 		fprintf(stderr, "\n");
-		fuse_parse_cmdline(&args, NULL, NULL, NULL);
+		DL(fuse_parse_cmdline)(&args, NULL, NULL, NULL);
 #endif
 	}
 	exit(-2);

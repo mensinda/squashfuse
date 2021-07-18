@@ -348,12 +348,14 @@ sqfs_err sqfs_ll_inode(sqfs_ll *ll, sqfs_inode *inode, fuse_ino_t i) {
 
 
 sqfs_err sqfs_ll_iget(fuse_req_t req, sqfs_ll_i *lli, fuse_ino_t i) {
+	LOAD_SYMBOL(void *,fuse_req_userdata,(fuse_req_t req));
+	LOAD_SYMBOL(int,fuse_reply_err,(fuse_req_t req, int err));
 	sqfs_err err = SQFS_OK;
-	lli->ll = fuse_req_userdata(req);
+	lli->ll = DL(fuse_req_userdata)(req);
 	if (i != SQFS_FUSE_INODE_NONE) {
 		err = sqfs_ll_inode(lli->ll, &lli->inode, i);
 		if (err)
-			fuse_reply_err(req, ENOENT);
+			DL(fuse_reply_err)(req, ENOENT);
 	}
 	return err;
 }

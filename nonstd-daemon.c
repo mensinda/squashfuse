@@ -31,7 +31,7 @@
 #if FUSE_USE_VERSION >= 30
 #include <fuse3/fuse_lowlevel.h>
 #else
-#include <fuse_lowlevel.h>
+#include <fuse/fuse_lowlevel.h>
 #endif
 
 int sqfs_ll_daemonize(int fg) {
